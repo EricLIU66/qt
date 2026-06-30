@@ -31,6 +31,12 @@ docs                  Product, architecture, and operating documentation
 scripts               Local quality gates
 ```
 
+## Optional Data Sources
+
+- CSV fixtures/imports for deterministic tests and local development.
+- Futu OpenD for future market data ingestion.
+- QuestDB for local time-series market data storage and SQL-backed research datasets.
+
 ## Quick Start
 
 Use Python 3.11 or 3.12. Python 3.13 is intentionally excluded until the quantitative stack fully supports it.

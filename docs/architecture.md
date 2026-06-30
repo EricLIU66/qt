@@ -8,7 +8,7 @@ V1 is a single-user, Python-first, daily-bar research and backtesting product fo
 
 ```mermaid
 flowchart LR
-  Data[Futu OpenD / CSV Import] --> Normalize[Data Normalization]
+  Data[Futu OpenD / QuestDB / CSV Import] --> Normalize[Data Normalization]
   Normalize --> Strategy[Python Strategy Module]
   Strategy --> Engine[VectorBT Adapter]
   Engine --> Contract[Internal Result Contract]
@@ -32,4 +32,8 @@ flowchart LR
 - VectorBT as the intended backtesting engine.
 - FastAPI as the backend API boundary.
 - React/Vite/Recharts for the result UI.
-- Local filesystem storage first, with a future option to add SQLite or DuckDB.
+- Local filesystem storage first, with QuestDB as an optional time-series store for larger historical datasets.
+
+## Data Source Boundary
+
+All data sources must normalize into the same internal daily-bar contract before strategy or backtest code can consume them. Futu OpenD, QuestDB, and CSV imports are provider implementations, not strategy dependencies.
