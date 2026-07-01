@@ -251,6 +251,94 @@ h2 {
   font-size: 13px;
 }
 
+.chart-tools {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.chart-tools button {
+  background: #ffffff;
+  border: 1px solid #cbd5df;
+  border-radius: 6px;
+  color: #334155;
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+.chart-legend {
+  align-items: center;
+  color: #42515c;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.chart-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.legend-line {
+  display: inline-block;
+  height: 0;
+  width: 20px;
+}
+
+.legend-line.price {
+  border-top: 2px solid #64748b;
+}
+
+.legend-line.hold {
+  border-top: 2px dashed #111827;
+}
+
+.legend-dot {
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+}
+
+.legend-dot.buy {
+  background: #16a34a;
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+}
+
+.legend-dot.sell {
+  background: #dc2626;
+  transform: rotate(45deg);
+}
+
+.chart-tooltip {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.tooltip-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.tooltip-row span {
+  border-radius: 999px;
+  height: 8px;
+  width: 8px;
+}
+
+.tooltip-row p {
+  color: #334155;
+  font-size: 13px;
+}
+
 .details {
   display: grid;
   grid-template-columns: 1fr 1fr;

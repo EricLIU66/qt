@@ -1,9 +1,11 @@
 import { Activity, BarChart3, History, Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Brush,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -39,6 +41,7 @@ export function App() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [brushKey, setBrushKey] = useState(0);
 
   const applyRuns = useCallback((nextRuns: FibonacciRun[]) => {
     setRuns(nextRuns);
@@ -134,6 +137,27 @@ export function App() {
       String(left.date).localeCompare(String(right.date))
     );
   }, [bars, runs]);
+
+  const tradeMarkers = useMemo(() => {
+    if (!selectedRun) {
+      return [];
+    }
+    const selectedSeries = new Map(selectedRun.series.map((point) => [point.date, point.strategy_index]));
+    return selectedRun.trade_events
+      .map((event) => {
+        const strategyIndex = selectedSeries.get(event.date);
+        if (strategyIndex === undefined) {
+          return null;
+        }
+        return {
+          date: event.date,
+          strategyIndex,
+          side: event.side,
+          price: event.price
+        };
+      })
+      .filter((marker): marker is NonNullable<typeof marker> => marker !== null);
+  }, [selectedRun]);
 
   const runKeys = runs.map((run) => run.label);
   const latestBar = bars[bars.length - 1];
@@ -246,14 +270,19 @@ export function App() {
         <section className="chart-panel" id="overview">
           <div className="section-heading">
             <h2>Price and Strategy Curves</h2>
-            <span>Normalized index, start = 100</span>
+            <div className="chart-tools">
+              <span>Drag the lower brush to zoom</span>
+              <button type="button" onClick={() => setBrushKey((key) => key + 1)}>
+                Reset
+              </button>
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={440}>
-            <LineChart data={chartData}>
+            <ComposedChart data={chartData} margin={{ bottom: 28, left: 4, right: 18, top: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#d8dee4" />
               <XAxis dataKey="date" minTickGap={36} tickLine={false} axisLine={false} />
               <YAxis tickLine={false} axisLine={false} width={72} />
-              <Tooltip />
+              <Tooltip content={<ChartTooltip />} />
               <Line
                 dataKey="SPY close"
                 dot={false}
@@ -282,8 +311,35 @@ export function App() {
                   type="monotone"
                 />
               ))}
-            </LineChart>
+              {tradeMarkers.map((marker) => (
+                <ReferenceDot
+                  fill={marker.side === "buy" ? "#16a34a" : "#dc2626"}
+                  ifOverflow="visible"
+                  isFront
+                  key={`${marker.side}-${marker.date}-${marker.price}`}
+                  r={4}
+                  stroke="#ffffff"
+                  strokeWidth={1.5}
+                  x={marker.date}
+                  y={marker.strategyIndex}
+                />
+              ))}
+              <Brush
+                dataKey="date"
+                height={24}
+                key={brushKey}
+                travellerWidth={10}
+                stroke="#0f766e"
+                fill="#f8fafc"
+              />
+            </ComposedChart>
           </ResponsiveContainer>
+          <div className="chart-legend" aria-label="Chart legend">
+            <span><i className="legend-line price" />SPY close</span>
+            <span><i className="legend-line hold" />Buy & hold</span>
+            <span><i className="legend-dot buy" />Buy</span>
+            <span><i className="legend-dot sell" />Sell</span>
+          </div>
         </section>
 
         <section className="details" id="risk">
@@ -346,6 +402,46 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
+  );
+}
+
+function ChartTooltip({
+  active,
+  label,
+  payload
+}: {
+  active?: boolean;
+  label?: string;
+  payload?: Array<{
+    color?: string;
+    dataKey?: string;
+    name?: string;
+    payload?: { buy_price?: number; sell_price?: number };
+    value?: number;
+  }>;
+}) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+  return (
+    <div className="chart-tooltip">
+      <strong>{label}</strong>
+      {payload.map((item) => (
+        <div className="tooltip-row" key={`${item.name ?? item.dataKey}-${item.value}`}>
+          <span style={{ background: item.color ?? "#64748b" }} />
+          <p>
+            {item.name ?? item.dataKey}:{" "}
+            {typeof item.value === "number" ? item.value.toFixed(2) : "n/a"}
+            {item.dataKey === "buy_marker" && item.payload?.buy_price
+              ? ` @ ${item.payload.buy_price.toFixed(2)}`
+              : ""}
+            {item.dataKey === "sell_marker" && item.payload?.sell_price
+              ? ` @ ${item.payload.sell_price.toFixed(2)}`
+              : ""}
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }
 

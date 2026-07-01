@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from threading import Lock
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -29,6 +30,7 @@ class FibonacciParams(BaseModel):
 
 
 RUN_HISTORY: list[dict[str, Any]] = []
+RUN_HISTORY_LOCK = Lock()
 
 
 def create_app() -> "FastAPI":
@@ -61,16 +63,18 @@ def create_app() -> "FastAPI":
 
     @app.get("/backtests")
     def backtest_history() -> dict[str, Any]:
-        return {"runs": RUN_HISTORY}
+        with RUN_HISTORY_LOCK:
+            return {"runs": list(RUN_HISTORY)}
 
     @app.post("/backtests/fibonacci")
     def run_fibonacci(params: FibonacciParams) -> dict[str, Any]:
         bars = load_daily_bars(params.symbol)
         if not bars:
             raise HTTPException(status_code=404, detail=f"No QuestDB bars found for {params.symbol}")
-        run = run_fibonacci_backtest(bars, params)
-        RUN_HISTORY.append(run)
-        return {"run": run, "runs": RUN_HISTORY}
+        with RUN_HISTORY_LOCK:
+            run = run_fibonacci_backtest(bars, params, len(RUN_HISTORY) + 1)
+            RUN_HISTORY.append(run)
+            return {"run": run, "runs": list(RUN_HISTORY)}
 
     return app
 
@@ -123,7 +127,9 @@ def load_daily_bars(symbol: str) -> list[dict[str, Any]]:
     return bars
 
 
-def run_fibonacci_backtest(bars: list[dict[str, Any]], params: FibonacciParams) -> dict[str, Any]:
+def run_fibonacci_backtest(
+    bars: list[dict[str, Any]], params: FibonacciParams, sequence: int
+) -> dict[str, Any]:
     df = pd.DataFrame(bars)
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date").reset_index(drop=True)
@@ -199,7 +205,7 @@ def run_fibonacci_backtest(bars: list[dict[str, Any]], params: FibonacciParams) 
     ]
     return {
         "run_id": run_id,
-        "label": f"fib {params.lookback}/{params.sma_window} #{len(RUN_HISTORY) + 1}",
+        "label": f"fib {params.lookback}/{params.sma_window} #{sequence}",
         "created_at": created_at,
         "symbol": params.symbol.upper(),
         "params": params.model_dump(),
@@ -225,7 +231,7 @@ def run_fibonacci_backtest(bars: list[dict[str, Any]], params: FibonacciParams) 
             "sma": clean_number(sma.iloc[-1]),
             "in_position": bool(latest["position_close"] == 1.0),
         },
-        "trade_events": trade_events[-20:],
+        "trade_events": trade_events,
         "series": series,
     }
 
