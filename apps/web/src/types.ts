@@ -1,44 +1,62 @@
-export type EquityPoint = {
+export type MarketBar = {
   date: string;
-  equity: number;
-  cash: number;
-  exposure: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  close_index: number;
 };
 
-export type DrawdownPoint = {
-  date: string;
-  drawdown: number;
+export type FibonacciParams = {
+  symbol: string;
+  lookback: number;
+  sma_window: number;
+  entry_ratio: number;
+  resistance_ratio: number;
+  stop_ratio: number;
+  initial_cash: number;
 };
 
-export type MetricSummary = {
+export type RunMetrics = {
   total_return: number;
+  buy_hold_return: number;
   annualized_return: number;
   annualized_volatility: number;
   sharpe: number | null;
   max_drawdown: number;
   exposure: number;
+  trade_events: number;
   win_rate: number | null;
 };
 
-export type BenchmarkComparison = {
-  benchmark_symbol: string;
-  strategy_total_return: number;
-  benchmark_total_return: number;
-  excess_return: number;
-  correlation: number | null;
+export type RunSeriesPoint = {
+  date: string;
+  strategy_index: number;
+  buy_hold_index: number;
+  position: number;
 };
 
-export type BacktestRun = {
+export type FibonacciRun = {
   run_id: string;
-  strategy_name: string;
-  symbols: string[];
-  start: string;
-  end: string;
-  metrics: MetricSummary;
-  equity_curve: EquityPoint[];
-  drawdowns: DrawdownPoint[];
-  benchmark: BenchmarkComparison | null;
-  parameters: Record<string, string | number | boolean>;
-  engine: string;
-  schema_version: string;
+  label: string;
+  created_at: string;
+  symbol: string;
+  params: FibonacciParams;
+  metrics: RunMetrics;
+  latest_levels: {
+    date: string;
+    close: number;
+    entry_support: number | null;
+    resistance: number | null;
+    stop_support: number | null;
+    sma: number | null;
+    in_position: boolean;
+  };
+  trade_events: Array<{
+    date: string;
+    side: "buy" | "sell";
+    price: number;
+  }>;
+  series: RunSeriesPoint[];
 };
