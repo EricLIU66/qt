@@ -1,16 +1,15 @@
 import { Activity, BarChart3, History, Play, RefreshCw, ShieldCheck } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Brush,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceDot,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+  ColorType,
+  createChart,
+  createSeriesMarkers,
+  LineSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type SeriesMarker,
+  type Time
+} from "lightweight-charts";
 import type { FibonacciParams, FibonacciRun, MarketBar } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -41,7 +40,6 @@ export function App() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [brushKey, setBrushKey] = useState(0);
 
   const applyRuns = useCallback((nextRuns: FibonacciRun[]) => {
     setRuns(nextRuns);
@@ -117,49 +115,6 @@ export function App() {
   const selectedRun =
     runs.find((run) => run.run_id === selectedRunId) ?? runs[runs.length - 1] ?? null;
 
-  const chartData = useMemo(() => {
-    const data = new Map<string, Record<string, string | number>>();
-    for (const bar of bars) {
-      data.set(bar.date, {
-        date: bar.date,
-        "SPY close": bar.close_index
-      });
-    }
-    for (const run of runs) {
-      for (const point of run.series) {
-        const existing = data.get(point.date) ?? { date: point.date };
-        existing["Buy & hold"] = point.buy_hold_index;
-        existing[run.label] = point.strategy_index;
-        data.set(point.date, existing);
-      }
-    }
-    return Array.from(data.values()).sort((left, right) =>
-      String(left.date).localeCompare(String(right.date))
-    );
-  }, [bars, runs]);
-
-  const tradeMarkers = useMemo(() => {
-    if (!selectedRun) {
-      return [];
-    }
-    const selectedSeries = new Map(selectedRun.series.map((point) => [point.date, point.strategy_index]));
-    return selectedRun.trade_events
-      .map((event) => {
-        const strategyIndex = selectedSeries.get(event.date);
-        if (strategyIndex === undefined) {
-          return null;
-        }
-        return {
-          date: event.date,
-          strategyIndex,
-          side: event.side,
-          price: event.price
-        };
-      })
-      .filter((marker): marker is NonNullable<typeof marker> => marker !== null);
-  }, [selectedRun]);
-
-  const runKeys = runs.map((run) => run.label);
   const latestBar = bars[bars.length - 1];
 
   return (
@@ -271,69 +226,10 @@ export function App() {
           <div className="section-heading">
             <h2>Price and Strategy Curves</h2>
             <div className="chart-tools">
-              <span>Drag the lower brush to zoom</span>
-              <button type="button" onClick={() => setBrushKey((key) => key + 1)}>
-                Reset
-              </button>
+              <span>Drag to pan, wheel or pinch to zoom</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={440}>
-            <ComposedChart data={chartData} margin={{ bottom: 28, left: 4, right: 18, top: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#d8dee4" />
-              <XAxis dataKey="date" minTickGap={36} tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} width={72} />
-              <Tooltip content={<ChartTooltip />} />
-              <Line
-                dataKey="SPY close"
-                dot={false}
-                isAnimationActive={false}
-                stroke="#64748b"
-                strokeWidth={1.4}
-                type="monotone"
-              />
-              <Line
-                dataKey="Buy & hold"
-                dot={false}
-                isAnimationActive={false}
-                stroke="#111827"
-                strokeDasharray="6 4"
-                strokeWidth={1.6}
-                type="monotone"
-              />
-              {runKeys.map((key, index) => (
-                <Line
-                  dataKey={key}
-                  dot={false}
-                  isAnimationActive={false}
-                  key={key}
-                  stroke={COLORS[index % COLORS.length]}
-                  strokeWidth={2}
-                  type="monotone"
-                />
-              ))}
-              {tradeMarkers.map((marker) => (
-                <ReferenceDot
-                  fill={marker.side === "buy" ? "#16a34a" : "#dc2626"}
-                  ifOverflow="visible"
-                  isFront
-                  key={`${marker.side}-${marker.date}-${marker.price}`}
-                  r={4}
-                  stroke="#ffffff"
-                  strokeWidth={1.5}
-                  x={marker.date}
-                  y={marker.strategyIndex}
-                />
-              ))}
-              <Brush
-                dataKey="date"
-                height={24}
-                key={brushKey}
-                travellerWidth={10}
-                stroke="#0f766e"
-                fill="#f8fafc"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <TradingViewStrategyChart bars={bars} runs={runs} selectedRun={selectedRun} />
           <div className="chart-legend" aria-label="Chart legend">
             <span><i className="legend-line price" />SPY close</span>
             <span><i className="legend-line hold" />Buy & hold</span>
@@ -371,6 +267,143 @@ export function App() {
   );
 }
 
+function TradingViewStrategyChart({
+  bars,
+  runs,
+  selectedRun
+}: {
+  bars: MarketBar[];
+  runs: FibonacciRun[];
+  selectedRun: FibonacciRun | null;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return undefined;
+    }
+
+    container.innerHTML = "";
+    const chart = createChart(container, {
+      autoSize: true,
+      layout: {
+        background: { color: "#ffffff", type: ColorType.Solid },
+        textColor: "#42515c"
+      },
+      grid: {
+        horzLines: { color: "#e5edf3" },
+        vertLines: { color: "#e5edf3" }
+      },
+      rightPriceScale: {
+        borderColor: "#d8dee4"
+      },
+      timeScale: {
+        borderColor: "#d8dee4",
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        rightOffset: 8,
+        timeVisible: false
+      },
+      handleScale: {
+        axisDoubleClickReset: true,
+        mouseWheel: true,
+        pinch: true
+      },
+      handleScroll: {
+        horzTouchDrag: true,
+        mouseWheel: true,
+        pressedMouseMove: true,
+        vertTouchDrag: false
+      },
+      localization: {
+        priceFormatter: (price: number) => price.toFixed(2)
+      }
+    });
+    chartRef.current = chart;
+
+    const spySeries = chart.addSeries(LineSeries, {
+      color: "#64748b",
+      lineWidth: 2,
+      priceLineVisible: false,
+      title: "SPY close"
+    });
+    spySeries.setData(
+      bars.map((bar) => ({
+        time: bar.date as Time,
+        value: bar.close_index
+      }))
+    );
+
+    if (runs.length > 0) {
+      const buyHoldSeries = chart.addSeries(LineSeries, {
+        color: "#111827",
+        lineStyle: 2,
+        lineWidth: 2,
+        priceLineVisible: false,
+        title: "Buy & hold"
+      });
+      buyHoldSeries.setData(
+        runs[0].series.map((point) => ({
+          time: point.date as Time,
+          value: point.buy_hold_index
+        }))
+      );
+    }
+
+    let selectedSeries: ISeriesApi<"Line", Time> | null = null;
+    for (const [index, run] of runs.entries()) {
+      const isSelected = run.run_id === selectedRun?.run_id;
+      const series = chart.addSeries(LineSeries, {
+        color: COLORS[index % COLORS.length],
+        lineWidth: isSelected ? 3 : 1,
+        priceLineVisible: false,
+        title: run.label
+      });
+      series.setData(
+        run.series.map((point) => ({
+          time: point.date as Time,
+          value: point.strategy_index
+        }))
+      );
+      if (isSelected) {
+        selectedSeries = series;
+      }
+    }
+
+    if (selectedRun && selectedSeries) {
+      const markers: SeriesMarker<Time>[] = selectedRun.trade_events.map((event) => ({
+        color: event.side === "buy" ? "#16a34a" : "#dc2626",
+        position: event.side === "buy" ? "belowBar" : "aboveBar",
+        shape: event.side === "buy" ? "arrowUp" : "arrowDown",
+        text: `${event.side.toUpperCase()} ${event.price.toFixed(2)}`,
+        time: event.date as Time
+      }));
+      createSeriesMarkers(selectedSeries, markers);
+    }
+
+    chart.timeScale().fitContent();
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+    };
+  }, [bars, runs, selectedRun]);
+
+  return (
+    <div className="tradingview-shell">
+      <div className="tradingview-chart" ref={containerRef} />
+      <button
+        className="chart-reset"
+        onClick={() => chartRef.current?.timeScale().fitContent()}
+        type="button"
+      >
+        Reset view
+      </button>
+    </div>
+  );
+}
+
 function NumberField({
   label,
   onChange,
@@ -402,46 +435,6 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
-  );
-}
-
-function ChartTooltip({
-  active,
-  label,
-  payload
-}: {
-  active?: boolean;
-  label?: string;
-  payload?: Array<{
-    color?: string;
-    dataKey?: string;
-    name?: string;
-    payload?: { buy_price?: number; sell_price?: number };
-    value?: number;
-  }>;
-}) {
-  if (!active || !payload?.length) {
-    return null;
-  }
-  return (
-    <div className="chart-tooltip">
-      <strong>{label}</strong>
-      {payload.map((item) => (
-        <div className="tooltip-row" key={`${item.name ?? item.dataKey}-${item.value}`}>
-          <span style={{ background: item.color ?? "#64748b" }} />
-          <p>
-            {item.name ?? item.dataKey}:{" "}
-            {typeof item.value === "number" ? item.value.toFixed(2) : "n/a"}
-            {item.dataKey === "buy_marker" && item.payload?.buy_price
-              ? ` @ ${item.payload.buy_price.toFixed(2)}`
-              : ""}
-            {item.dataKey === "sell_marker" && item.payload?.sell_price
-              ? ` @ ${item.payload.sell_price.toFixed(2)}`
-              : ""}
-          </p>
-        </div>
-      ))}
-    </div>
   );
 }
 

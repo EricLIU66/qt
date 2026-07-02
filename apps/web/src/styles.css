@@ -257,13 +257,25 @@ h2 {
   gap: 10px;
 }
 
-.chart-tools button {
+.tradingview-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.tradingview-chart {
+  height: 460px;
+  min-height: 360px;
+  width: 100%;
+}
+
+.chart-reset {
+  justify-self: end;
   background: #ffffff;
   border: 1px solid #cbd5df;
   border-radius: 6px;
   color: #334155;
   cursor: pointer;
-  padding: 6px 10px;
+  padding: 7px 11px;
 }
 
 .chart-legend {
@@ -310,33 +322,6 @@ h2 {
 .legend-dot.sell {
   background: #dc2626;
   transform: rotate(45deg);
-}
-
-.chart-tooltip {
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #d8dee4;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-}
-
-.tooltip-row {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.tooltip-row span {
-  border-radius: 999px;
-  height: 8px;
-  width: 8px;
-}
-
-.tooltip-row p {
-  color: #334155;
-  font-size: 13px;
 }
 
 .details {
